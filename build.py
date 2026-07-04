@@ -11,7 +11,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 BUILD_DIR = PROJECT_ROOT / "build"
 DIST_DIR = PROJECT_ROOT / "dist"
-SPEC_FILE = PROJECT_ROOT / "FreightInvoiceMerger.spec"
 
 
 def clean_build():
@@ -24,20 +23,10 @@ def clean_build():
         spec.unlink()
 
 
-def create_icon():
-    """Create a default icon (PNG) for the app if no .ico exists."""
-    icons_dir = PROJECT_ROOT / "resources"
-    icons_dir.mkdir(parents=True, exist_ok=True)
-    # The icon can be replaced with a proper .ico file
-    # PyInstaller can use .png or .ico
-
-
 def build():
     """Run PyInstaller to create the executable."""
-    # Ensure resources
-    create_icon()
+    clean_build()
 
-    # Build command
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
@@ -59,36 +48,25 @@ def build():
     ]
 
     # Add icon if available
-    icon_paths = [
-        PROJECT_ROOT / "resources" / "icon.ico",
-        PROJECT_ROOT / "resources" / "icon.png",
-    ]
-    for ip in icon_paths:
-        if ip.exists():
-            cmd.extend(["--icon", str(ip)])
+    for icon_path in [PROJECT_ROOT / "resources" / "icon.ico",
+                      PROJECT_ROOT / "resources" / "icon.png"]:
+        if icon_path.exists():
+            cmd.extend(["--icon", str(icon_path)])
             break
 
     cmd.append(str(PROJECT_ROOT / "main.py"))
 
-    print(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
-    if result.returncode != 0:
-        print("Build failed!")
-        print(result.stdout)
-        print(result.stderr)
-        return False
-
-    # Locate the built executable
-    exe_name = "FreightInvoiceMerger.exe" if sys.platform == "win32" else "FreightInvoiceMerger"
-    exe_path = DIST_DIR / exe_name
-    if exe_path.exists():
-        print(f"\n✅ Build successful: {exe_path}")
-        return True
-    else:
-        print(f"\n❌ Executable not found at expected path: {exe_path}")
-        return False
+    print(f"Running: {' '.join(cmd)}", flush=True)
+    result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=False, text=True)
+    return result.returncode == 0
 
 
 if __name__ == "__main__":
-    clean_build()
-    build()
+    success = build()
+    if success:
+        exe = DIST_DIR / "FreightInvoiceMerger.exe"
+        print(f"\n✅ Build successful: {exe}", flush=True)
+        sys.exit(0)
+    else:
+        print("\n❌ Build failed", flush=True)
+        sys.exit(1)
