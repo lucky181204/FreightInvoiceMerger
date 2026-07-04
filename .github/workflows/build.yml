@@ -29,7 +29,19 @@ jobs:
           pip install pyinstaller
 
       - name: Build executable
-        run: python build.py
+        run: |
+          pyinstaller --noconfirm --clean --windowed --onefile `
+            --name "FreightInvoiceMerger" `
+            --add-data "resources;resources" `
+            --add-data "config.json;." `
+            --hidden-import "xlrd" `
+            --hidden-import "rules.rule_v1" `
+            --hidden-import "openpyxl" `
+            --hidden-import "openpyxl.cell._writer" `
+            --hidden-import "PySide6.QtCore" `
+            --hidden-import "PySide6.QtWidgets" `
+            --hidden-import "PySide6.QtGui" `
+            main.py
 
       - name: Upload executable as artifact
         uses: actions/upload-artifact@v4
