@@ -3,17 +3,14 @@
 from rules.registry import RuleRegistry
 
 
-def parse_invoice(wb, rule_id: str) -> dict:
+def parse_invoice(sheet, rule_id: str) -> dict:
     """
-    Parse a single invoice workbook using the specified rule.
+    Parse a single invoice sheet (SheetWrapper) using the specified rule.
     Returns a dict mapping target columns to extracted values.
     """
     rule = RuleRegistry.get_rule(rule_id)
     if not rule:
         raise ValueError(f"Rule not found: {rule_id}")
-
-    # Invoice should have only one sheet with data
-    sheet = wb.active
 
     result = {}
     for mapping in rule.FIELD_MAPPINGS:

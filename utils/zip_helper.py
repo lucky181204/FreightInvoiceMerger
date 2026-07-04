@@ -1,27 +1,32 @@
-"""ZIP file helper utilities."""
+"""ZIP file helper utilities — supports both .xlsx and .xls."""
 
 import zipfile
 from pathlib import Path
 
 
+_EXCEL_EXTS = {".xlsx", ".xlsm", ".xltx", ".xls"}
+
+
 def extract_zip(zip_path: Path, extract_dir: Path) -> list[Path]:
-    """Extract a ZIP file and return paths to all .xlsx files found."""
+    """Extract a ZIP file and return paths to all Excel files found."""
     extract_dir.mkdir(parents=True, exist_ok=True)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(extract_dir)
 
     excel_files = sorted(
-        p for p in extract_dir.rglob("*.xlsx") if not p.name.startswith("~$")
+        p for p in extract_dir.rglob("*")
+        if p.suffix.lower() in _EXCEL_EXTS and not p.name.startswith("~$")
     )
     return excel_files
 
 
 def count_excel_in_zip(zip_path: Path) -> int:
-    """Count .xlsx entries inside a ZIP without extracting."""
+    """Count Excel entries inside a ZIP without extracting."""
     count = 0
     with zipfile.ZipFile(zip_path, "r") as zf:
         for name in zf.namelist():
-            if name.endswith(".xlsx") and not name.startswith("~$"):
+            ext = Path(name).suffix.lower()
+            if ext in _EXCEL_EXTS and not name.startswith("~$"):
                 count += 1
     return count

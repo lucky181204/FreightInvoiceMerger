@@ -33,6 +33,6 @@ Thumbs.db
 !resources/sample_invoices.zip
 
 # PyInstaller output
-/FreightInvoiceMerger/dist/
-/FreightInvoiceMerger/build/
-/FreightInvoiceMerger/*.spec
+dist/
+build/
+*.spec

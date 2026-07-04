@@ -46,6 +46,8 @@ def build():
         "--name", "FreightInvoiceMerger",
         "--add-data", f"resources{os.pathsep}resources",
         "--add-data", f"config.json{os.pathsep}.",
+        "--exclude-module", "xlwings",
+        "--hidden-import", "xlrd",
         "--hidden-import", "rules.rule_v1",
         "--hidden-import", "openpyxl",
         "--hidden-import", "openpyxl.cell._writer",

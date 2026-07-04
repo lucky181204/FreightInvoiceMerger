@@ -1,33 +1,96 @@
-"""Excel utility functions."""
+"""Excel utility functions — unified interface for .xls and .xlsx."""
+
+import re
+from pathlib import Path
 
 from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
+from openpyxl.utils import column_index_from_string
 
 
-def load_excel(path: str, data_only: bool = False):
-    """Load an Excel workbook."""
-    return load_workbook(path, data_only=data_only)
+_OPENPYXL_FMTS = {".xlsx", ".xlsm", ".xltx"}
 
 
-def get_cell_value(sheet, cell_ref: str):
-    """Get cell value by reference like 'I29'."""
-    return sheet[cell_ref].value
+def load_workbook_universal(path: str | Path):
+    """
+    Load any Excel file:
+    - .xlsx / .xlsm / .xltx → openpyxl (for template writing)
+    - .xls                  → xlrd (for invoice reading)
+    Returns (workbook, format_type) where format_type is 'xlsx' or 'xls'.
+    """
+    path = Path(path)
+    ext = path.suffix.lower()
+    if ext in _OPENPYXL_FMTS:
+        wb = load_workbook(str(path), data_only=True)
+        return wb, "xlsx"
+    elif ext == ".xls":
+        import xlrd
+        wb = xlrd.open_workbook(str(path))
+        return wb, "xls"
+    else:
+        raise ValueError(f"不支持的格式: {path.suffix}")
 
 
-def get_cell_range(sheet, start_ref: str, end_ref: str):
-    """Get a range of cell values and merge with '/'."""
-    from openpyxl.utils import range_boundaries
-    min_col, min_row, max_col, max_row = range_boundaries(f"{start_ref}:{end_ref}")
-    values = []
-    for row in range(min_row, max_row + 1):
-        for col in range(min_col, max_col + 1):
-            v = sheet.cell(row=row, column=col).value
-            if v is not None:
-                values.append(str(v))
-    return values
+class SheetWrapper:
+    """
+    Unified wrapper providing the same cell access interface
+    for both openpyxl (.xlsx) and xlrd (.xls) sheets.
+
+    Usage:
+        wrapper["I29"]       → CellValue with .value
+        wrapper.cell(r, c)   → CellValue with .value (1-based row/col)
+    """
+
+    def __init__(self, sheet, fmt: str):
+        self._sheet = sheet
+        self._fmt = fmt
+
+    def __getitem__(self, ref: str):
+        col_0, row_0 = _parse_ref(ref)
+        return self._cell_at(row_0, col_0)
+
+    def cell(self, row: int, column: int):
+        """1-based row/column (openpyxl convention)."""
+        return self._cell_at(row - 1, column - 1)
+
+    # ── internal ──
+
+    def _cell_at(self, row_0: int, col_0: int):
+        if self._fmt == "xls":
+            val = self._sheet.cell_value(row_0, col_0)
+        else:
+            val = self._sheet.cell(row=row_0 + 1, column=col_0 + 1).value
+        return CellValue(val)
+
+    @property
+    def name(self):
+        if self._fmt == "xls":
+            return self._sheet.name
+        return self._sheet.title
 
 
-def col_letter_to_index(col: str) -> int:
-    """Convert column letter to 1-based index."""
-    from openpyxl.utils import column_index_from_string
-    return column_index_from_string(col)
+class CellValue:
+    """Thin wrapper so both paths expose a .value attribute."""
+    __slots__ = ("value",)
+
+    def __init__(self, value):
+        self.value = value
+
+    def __repr__(self):
+        return f"CellValue({self.value!r})"
+
+
+def _parse_ref(ref: str) -> tuple[int, int]:
+    """Parse 'I29' → (col_0, row_0)."""
+    m = re.match(r"([A-Z]+)(\d+)", ref.upper())
+    if not m:
+        raise ValueError(f"无效单元格引用: {ref}")
+    col_0 = column_index_from_string(m.group(1)) - 1
+    row_0 = int(m.group(2)) - 1
+    return col_0, row_0
+
+
+def get_active_sheet(wb, fmt: str) -> SheetWrapper:
+    """Get the active/default sheet as a SheetWrapper."""
+    if fmt == "xls":
+        return SheetWrapper(wb.sheet_by_index(0), fmt)
+    return SheetWrapper(wb.active, fmt)
