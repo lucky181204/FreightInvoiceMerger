@@ -13,23 +13,19 @@ BUILD_DIR = PROJECT_ROOT / "build"
 DIST_DIR = PROJECT_ROOT / "dist"
 
 
-def clean_build():
-    """Clean previous build artifacts."""
+def build():
+    # Clean
     for d in [BUILD_DIR, DIST_DIR]:
         if d.exists():
             shutil.rmtree(d)
-    spec = PROJECT_ROOT / "FreightInvoiceMerger.spec"
-    if spec.exists():
-        spec.unlink()
+    for f in PROJECT_ROOT.glob("*.spec"):
+        f.unlink()
 
-
-def build():
-    """Run PyInstaller to create the executable."""
-    clean_build()
-
+    # Build command — note: NO --collect-all PySide6 (pulls QtWebEngine = 400MB+ crash)
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
+        "--clean",
         "--windowed",
         "--onefile",
         "--name", "FreightInvoiceMerger",
@@ -43,30 +39,31 @@ def build():
         "--hidden-import", "PySide6.QtCore",
         "--hidden-import", "PySide6.QtWidgets",
         "--hidden-import", "PySide6.QtGui",
-        "--collect-all", "openpyxl",
-        "--collect-all", "PySide6",
+        str(PROJECT_ROOT / "main.py"),
     ]
 
-    # Add icon if available
-    for icon_path in [PROJECT_ROOT / "resources" / "icon.ico",
-                      PROJECT_ROOT / "resources" / "icon.png"]:
-        if icon_path.exists():
-            cmd.extend(["--icon", str(icon_path)])
-            break
+    print("Building FreightInvoiceMerger.exe ...", flush=True)
+    result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
 
-    cmd.append(str(PROJECT_ROOT / "main.py"))
+    # Always print full output so GitHub log shows it
+    if result.stdout:
+        print(result.stdout, flush=True)
+    if result.stderr:
+        print(result.stderr, flush=True)
 
-    print(f"Running: {' '.join(cmd)}", flush=True)
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT, capture_output=False, text=True)
-    return result.returncode == 0
+    if result.returncode != 0:
+        print(f"\n❌ PyInstaller exit code: {result.returncode}", flush=True)
+        return False
+
+    exe = DIST_DIR / "FreightInvoiceMerger.exe"
+    if not exe.exists():
+        print(f"\n❌ Executable not found at {exe}", flush=True)
+        return False
+
+    size_mb = exe.stat().st_size / (1024 * 1024)
+    print(f"\n✅ Build successful: {exe} ({size_mb:.1f} MB)", flush=True)
+    return True
 
 
 if __name__ == "__main__":
-    success = build()
-    if success:
-        exe = DIST_DIR / "FreightInvoiceMerger.exe"
-        print(f"\n✅ Build successful: {exe}", flush=True)
-        sys.exit(0)
-    else:
-        print("\n❌ Build failed", flush=True)
-        sys.exit(1)
+    sys.exit(0 if build() else 1)
