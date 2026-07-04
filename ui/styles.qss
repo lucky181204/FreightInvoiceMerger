@@ -1,0 +1,268 @@
+/* =========================================================
+   Freight Invoice Merger Pro — Modern Business Stylesheet
+   Inspired by: Windows 11, Office 365, Notion
+   ========================================================= */
+
+/* Global */
+QWidget {
+    font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;
+    font-size: 13px;
+    color: #1E1E1E;
+    background-color: #F5F7FA;
+}
+
+QMainWindow {
+    background-color: #F5F7FA;
+}
+
+/* Card containers */
+QFrame#card {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    border: 1px solid #E8ECF0;
+}
+
+/* GroupBox styled as card header */
+QGroupBox {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    border: 1px solid #E8ECF0;
+    margin-top: 16px;
+    padding: 16px 20px 20px 20px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    padding: 0 8px;
+    color: #1E1E1E;
+}
+
+/* Labels */
+QLabel {
+    background: transparent;
+    color: #1E1E1E;
+}
+
+QLabel#titleLabel {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1E1E1E;
+}
+
+QLabel#versionLabel {
+    font-size: 11px;
+    color: #8C8C8C;
+}
+
+QLabel#sectionLabel {
+    font-size: 13px;
+    font-weight: 600;
+    color: #595959;
+    padding-left: 2px;
+}
+
+QLabel#progressPercent {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1677FF;
+}
+
+QLabel#progressStatus {
+    font-size: 12px;
+    color: #595959;
+}
+
+/* Line edit (file paths) */
+QLineEdit {
+    background-color: #FFFFFF;
+    border: 1px solid #D9D9D9;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #1E1E1E;
+    selection-background-color: #1677FF;
+}
+
+QLineEdit:focus {
+    border-color: #1677FF;
+    border-width: 1.5px;
+}
+
+QLineEdit:disabled {
+    background-color: #F5F5F5;
+    color: #BFBFBF;
+}
+
+/* Push buttons */
+QPushButton {
+    background-color: #1677FF;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 20px;
+}
+
+QPushButton:hover {
+    background-color: #4096FF;
+}
+
+QPushButton:pressed {
+    background-color: #0958D9;
+}
+
+QPushButton:disabled {
+    background-color: #D9D9D9;
+    color: #8C8C8C;
+}
+
+QPushButton#browseButton {
+    background-color: #FFFFFF;
+    color: #1677FF;
+    border: 1px solid #1677FF;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 20px;
+}
+
+QPushButton#browseButton:hover {
+    background-color: #F0F5FF;
+    border-color: #4096FF;
+    color: #4096FF;
+}
+
+QPushButton#browseButton:pressed {
+    background-color: #E6F0FF;
+    border-color: #0958D9;
+    color: #0958D9;
+}
+
+QPushButton#startButton {
+    background-color: #1677FF;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 48px;
+    font-size: 15px;
+    font-weight: 700;
+    min-height: 24px;
+}
+
+QPushButton#startButton:hover {
+    background-color: #4096FF;
+}
+
+QPushButton#startButton:pressed {
+    background-color: #0958D9;
+}
+
+QPushButton#startButton:disabled {
+    background-color: #D9D9D9;
+    color: #8C8C8C;
+}
+
+/* Progress bar */
+QProgressBar {
+    background-color: #E8ECF0;
+    border: none;
+    border-radius: 4px;
+    height: 8px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background-color: #1677FF;
+    border-radius: 4px;
+}
+
+/* Combo box (rule selector) */
+QComboBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D9D9D9;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #1E1E1E;
+    min-width: 120px;
+}
+
+QComboBox:focus {
+    border-color: #1677FF;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 30px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    width: 0;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    border: 1px solid #D9D9D9;
+    border-radius: 6px;
+    padding: 4px;
+    selection-background-color: #F0F5FF;
+    selection-color: #1677FF;
+    outline: none;
+}
+
+/* Log text area */
+QPlainTextEdit {
+    background-color: #1A1A2E;
+    color: #E0E0E0;
+    border: 1px solid #E8ECF0;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: "Consolas", "Courier New", "Microsoft YaHei UI", monospace;
+    font-size: 12px;
+    selection-background-color: #1677FF;
+}
+
+/* Scroll bars */
+QScrollBar:vertical {
+    background-color: #F0F0F0;
+    width: 8px;
+    border: none;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #C0C0C0;
+    border-radius: 4px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #A0A0A0;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background-color: #F0F0F0;
+    height: 8px;
+    border: none;
+    border-radius: 4px;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #C0C0C0;
+    border-radius: 4px;
+    min-width: 30px;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
