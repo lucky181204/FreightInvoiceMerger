@@ -177,10 +177,19 @@ class MainWindow(QMainWindow):
 
     def _on_rule_changed(self, rule_id: str):
         self.current_rule_id = rule_id
+        # Clear all file selections when switching rules
+        self.template_path = ""
+        self.template_row.set_path("")
+        self.zip_path = ""
+        self.zip_row.set_path("")
+        self.sort_file_path = ""
+        self.sort_row.set_path("")
+        self.progress_panel.reset()
+        self.log_panel.clear_log()
+
         # Toggle sort file visibility for Rule2
         if rule_id == "rule_v2":
             self.sort_row.setVisible(True)
-            self.sort_row.label_text = "排序模板（请选择 Freight Invoice list 2026Fareast_merged.xlsx）"
         else:
             self.sort_row.setVisible(False)
 

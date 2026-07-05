@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+# Allowed template extensions
+_TEMPLATE_EXTS = {".xlsx", ".xlsm", ".xltx", ".xls"}
+
 
 def validate_template(path: str) -> tuple[bool, str]:
     """Validate the template Excel file exists and is valid."""
@@ -10,8 +13,8 @@ def validate_template(path: str) -> tuple[bool, str]:
     p = Path(path)
     if not p.exists():
         return False, f"模板文件不存在：{p.name}"
-    if p.suffix not in (".xlsx", ".xlsm", ".xltx"):
-        return False, f"模板格式错误（需要 .xlsx）：{p.name}"
+    if p.suffix.lower() not in _TEMPLATE_EXTS:
+        return False, f"模板格式错误（需要 .xlsx 或 .xls）：{p.name}"
     return True, ""
 
 
