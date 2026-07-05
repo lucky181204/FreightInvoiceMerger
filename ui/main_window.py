@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QIcon
 
-from ui.widgets import FileBrowseRow, RuleSelector, ProgressPanel, LogPanel
+from ui.widgets import FileBrowseRow, OutputDirRow, RuleSelector, ProgressPanel, LogPanel
 from core.processor import run_processing, load_config
 from rules.registry import RuleRegistry
 from utils.logger import log_signal
@@ -20,10 +20,11 @@ class ProcessingThread(QThread):
     progress_update = Signal(str)
     finished_signal = Signal(object)
 
-    def __init__(self, template_path, zip_path, rule_id, parent=None):
+    def __init__(self, template_path, zip_path, output_dir, rule_id, parent=None):
         super().__init__(parent)
         self.template_path = template_path
         self.zip_path = zip_path
+        self.output_dir = output_dir
         self.rule_id = rule_id
 
     def run(self):
@@ -34,6 +35,7 @@ class ProcessingThread(QThread):
             self.template_path,
             self.zip_path,
             self.rule_id,
+            output_dir=self.output_dir,
             progress_callback=progress_callback,
         )
         self.finished_signal.emit(result)
@@ -52,6 +54,7 @@ class MainWindow(QMainWindow):
         # Track state
         self.template_path = ""
         self.zip_path = ""
+        self.output_dir = ""
         self.current_rule_id = "rule_v1"
         self.is_processing = False
 
@@ -109,6 +112,16 @@ class MainWindow(QMainWindow):
         self.zip_row.file_changed.connect(self._on_zip_changed)
         main_layout.addWidget(self.zip_row)
 
+        # ── Output directory row ──
+        last_output = self.config.get("last_output_dir", "")
+        self.output_dir_row = OutputDirRow(
+            label_text="输出路径",
+            default_dir=last_output,
+            placeholder="选择输出文件保存目录...",
+        )
+        self.output_dir_row.dir_changed.connect(self._on_output_dir_changed)
+        main_layout.addWidget(self.output_dir_row)
+
         # ── Rule selector ──
         all_rules = RuleRegistry.list_rules() or [{"id": "rule_v1", "name": "Rule1"}]
         self.rule_selector = RuleSelector(all_rules)
@@ -146,6 +159,9 @@ class MainWindow(QMainWindow):
     def _on_zip_changed(self, path: str):
         self.zip_path = path
 
+    def _on_output_dir_changed(self, path: str):
+        self.output_dir = path
+
     def _on_rule_changed(self, rule_id: str):
         self.current_rule_id = rule_id
 
@@ -165,6 +181,22 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "提示", "请选择ZIP文件。")
             return
 
+        # Use output_dir if set, otherwise fall back to template dir
+        output_dir = self.output_dir
+        if not output_dir:
+            from pathlib import Path
+            output_dir = str(Path(self.template_path).parent)
+        # Save for next launch
+        self.config["last_output_dir"] = output_dir
+        try:
+            import json
+            from pathlib import Path
+            config_path = Path(__file__).parent.parent / "config.json"
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(self.config, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+
         # Reset progress
         self.progress_panel.reset()
         self.log_panel.clear_log()
@@ -176,6 +208,7 @@ class MainWindow(QMainWindow):
         self._processing_thread = ProcessingThread(
             self.template_path,
             self.zip_path,
+            output_dir,
             self.current_rule_id,
         )
         self._processing_thread.progress_update.connect(self._on_progress_update)
@@ -197,9 +230,10 @@ class MainWindow(QMainWindow):
 
         self.progress_panel.set_progress(100, "处理完成 ✓")
         summary = (
-            f"处理完成！\n\n"
+            f"数据整合完成！\n\n"
             f"成功：{result.success_count}\n"
-            f"失败：{result.error_count}\n\n"
+            f"失败：{result.error_count}\n"
+            f"耗时：{result.elapsed:.1f}秒\n\n"
             f"输出文件：{result.output_path}"
         )
         QMessageBox.information(self, "完成", summary)

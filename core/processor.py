@@ -2,9 +2,10 @@
 
 import json
 import os
+import subprocess
 import tempfile
+import time
 from pathlib import Path
-from datetime import datetime
 
 from utils.logger import logger
 from utils.zip_helper import count_excel_in_zip
@@ -21,6 +22,7 @@ def load_config() -> dict:
         "open_after_finish": True,
         "auto_sort": True,
         "remember_last_path": True,
+        "last_output_dir": "",
     }
     if config_path.exists():
         try:
@@ -31,11 +33,10 @@ def load_config() -> dict:
     return defaults
 
 
-def get_output_path(template_path: str, config: dict) -> str:
+def get_output_path(output_dir: str, config: dict) -> str:
     """Generate output file path with auto-increment if exists."""
-    template_dir = Path(template_path).parent
     base_name = config.get("output_name", "Freight Invoice list 2026Fareast_Output.xlsx")
-    output_path = template_dir / base_name
+    output_path = Path(output_dir) / base_name
 
     if not output_path.exists():
         return str(output_path)
@@ -45,7 +46,7 @@ def get_output_path(template_path: str, config: dict) -> str:
     counter = 1
     while True:
         new_name = f"{stem}({counter}){suffix}"
-        new_path = template_dir / new_name
+        new_path = Path(output_dir) / new_name
         if not new_path.exists():
             return str(new_path)
         counter += 1
@@ -57,23 +58,38 @@ class ProcessingResult:
         self.error_count = 0
         self.output_path = ""
         self.error_message = ""
+        self.elapsed = 0.0
+
+
+def open_file_location(file_path: str):
+    """Open the folder containing the file and select it (Windows only)."""
+    import platform
+    if platform.system() == "Windows":
+        try:
+            os.startfile(os.path.dirname(file_path))
+        except Exception:
+            pass
 
 
 def run_processing(
     template_path: str,
     zip_path: str,
     rule_id: str,
+    output_dir: str = "",
     progress_callback=None,
 ) -> ProcessingResult:
     """
     Main processing workflow.
-    Returns ProcessingResult with status, counts, and output path.
+    Returns ProcessingResult with status, counts, output path, and elapsed time.
     """
     result = ProcessingResult()
+    start_time = time.time()
 
     def progress(msg):
         if progress_callback:
             progress_callback(msg)
+
+    config = load_config()
 
     # Step 1: Validate inputs
     progress("验证文件...")
@@ -89,7 +105,12 @@ def run_processing(
         logger.error(msg)
         return result
 
-    # Step 2: Count files
+    # Step 2: Determine output directory
+    if not output_dir:
+        output_dir = str(Path(template_path).parent)
+    logger.info(f"输出目录：{output_dir}")
+
+    # Step 3: Count files
     logger.info("读取ZIP...")
     try:
         file_count = count_excel_in_zip(Path(zip_path))
@@ -99,7 +120,7 @@ def run_processing(
         logger.error(result.error_message)
         return result
 
-    # Step 3: Extract data
+    # Step 4: Extract data
     progress("解压ZIP...")
     extract_dir = Path(tempfile.mkdtemp(prefix="invoice_"))
     try:
@@ -116,10 +137,8 @@ def run_processing(
         logger.error(result.error_message)
         return result
 
-    # Step 4: Write to template
-    config = load_config()
-    output_path = get_output_path(template_path, config)
-
+    # Step 5: Write to template
+    output_path = get_output_path(output_dir, config)
     progress("写入模板...")
     try:
         write_to_template(
@@ -135,18 +154,12 @@ def run_processing(
         return result
 
     result.output_path = output_path
+    result.elapsed = time.time() - start_time
 
-    # Step 5: Open result
+    # Step 6: Open file location
     if config.get("open_after_finish", True):
-        try:
-            os.startfile(output_path)
-        except AttributeError:
-            import subprocess
-            try:
-                subprocess.Popen(["xdg-open", output_path])
-            except Exception:
-                pass  # Windows handled by os.startfile
+        open_file_location(output_path)
 
-    # Summary
-    logger.info("完成")
+    # Summary log
+    logger.info(f"成功：{result.success_count}  失败：{result.error_count}  耗时：{result.elapsed:.1f}秒")
     return result

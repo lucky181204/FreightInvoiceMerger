@@ -75,6 +75,57 @@ class FileBrowseRow(QFrame):
         self.path_edit.setText(path)
 
 
+class OutputDirRow(QFrame):
+    """Label + folder path + browse button, remembers last path."""
+
+    dir_changed = Signal(str)
+
+    def __init__(self, label_text: str, default_dir: str = "",
+                 placeholder: str = "", parent=None):
+        super().__init__(parent)
+        self._dir_path = default_dir
+
+        self.setObjectName("card")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
+
+        label = QLabel(label_text)
+        label.setObjectName("sectionLabel")
+        layout.addWidget(label)
+
+        path_row = QHBoxLayout()
+        path_row.setSpacing(8)
+
+        self.path_edit = QLineEdit()
+        self.path_edit.setPlaceholderText(placeholder)
+        self.path_edit.setReadOnly(True)
+        if default_dir:
+            self.path_edit.setText(default_dir)
+        path_row.addWidget(self.path_edit, 1)
+
+        self.browse_btn = QPushButton("浏览")
+        self.browse_btn.setObjectName("browseButton")
+        self.browse_btn.clicked.connect(self._on_browse)
+        path_row.addWidget(self.browse_btn)
+
+        layout.addLayout(path_row)
+
+    def _on_browse(self):
+        path = QFileDialog.getExistingDirectory(self, "选择输出目录", self._dir_path)
+        if path:
+            self._dir_path = path
+            self.path_edit.setText(path)
+            self.dir_changed.emit(path)
+
+    def get_path(self) -> str:
+        return self._dir_path
+
+    def set_path(self, path: str):
+        self._dir_path = path
+        self.path_edit.setText(path)
+
+
 class RuleSelector(QFrame):
     """Dropdown to select processing rule."""
 
