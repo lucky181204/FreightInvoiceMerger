@@ -1,12 +1,15 @@
-"""Main window for Freight Invoice Merger Pro."""
+"""Main window for Freight Invoice Merger Pro.
+
+Supports Rule1 (月发票清单) and Rule2 (大发票) with context-sensitive fields.
+"""
 
 from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QMessageBox,
 )
-from PySide6.QtCore import Qt, QThread, Signal, QTimer, QMetaObject
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtGui import QFont
 
 from ui.widgets import FileBrowseRow, OutputDirRow, RuleSelector, ProgressPanel, LogPanel
 from core.processor import run_processing, load_config
@@ -20,12 +23,14 @@ class ProcessingThread(QThread):
     progress_update = Signal(str)
     finished_signal = Signal(object)
 
-    def __init__(self, template_path, zip_path, output_dir, rule_id, parent=None):
+    def __init__(self, template_path, zip_path, output_dir, rule_id,
+                 sort_file_path="", parent=None):
         super().__init__(parent)
         self.template_path = template_path
         self.zip_path = zip_path
         self.output_dir = output_dir
         self.rule_id = rule_id
+        self.sort_file_path = sort_file_path
 
     def run(self):
         def progress_callback(msg):
@@ -36,6 +41,7 @@ class ProcessingThread(QThread):
             self.zip_path,
             self.rule_id,
             output_dir=self.output_dir,
+            sort_file_path=self.sort_file_path,
             progress_callback=progress_callback,
         )
         self.finished_signal.emit(result)
@@ -54,6 +60,7 @@ class MainWindow(QMainWindow):
         # Track state
         self.template_path = ""
         self.zip_path = ""
+        self.sort_file_path = ""
         self.output_dir = ""
         self.current_rule_id = "rule_v1"
         self.is_processing = False
@@ -86,25 +93,45 @@ class MainWindow(QMainWindow):
         title.setObjectName("titleLabel")
         title_row.addWidget(title)
         title_row.addStretch()
-        ver = QLabel("Version 1.0")
+        ver = QLabel("Version 2.0")
         ver.setObjectName("versionLabel")
         title_row.addWidget(ver)
         header_layout.addLayout(title_row)
         main_layout.addWidget(header)
 
+        # ── Rule selector (use tab-style radio to switch between rule1/rule2) ──
+        all_rules = RuleRegistry.list_rules() or [
+            {"id": "rule_v1", "name": "Rule1"},
+            {"id": "rule_v2", "name": "Rule2"},
+        ]
+        self.rule_selector = RuleSelector(all_rules)
+        self.rule_selector.rule_changed.connect(self._on_rule_changed)
+        main_layout.addWidget(self.rule_selector)
+
         # ── Template row ──
         self.template_row = FileBrowseRow(
             label_text="模板",
             browse_mode="file",
-            file_filter="Excel 模板 (*.xlsx *.xlsm *.xltx);;所有文件 (*)",
+            file_filter="Excel 文件 (*.xlsx *.xlsm *.xltx *.xls);;所有文件 (*)",
             placeholder="请选择模板文件...",
         )
         self.template_row.file_changed.connect(self._on_template_changed)
         main_layout.addWidget(self.template_row)
 
+        # ── Sort file row (for Rule2, hidden by default) ──
+        self.sort_row = FileBrowseRow(
+            label_text="排序模板（请选择 Freight Invoice list 2026Fareast_merged.xlsx）",
+            browse_mode="file",
+            file_filter="Excel 文件 (*.xlsx *.xlsm *.xltx);;所有文件 (*)",
+            placeholder="用于确定大发票生成顺序...",
+        )
+        self.sort_row.file_changed.connect(self._on_sort_file_changed)
+        self.sort_row.setVisible(False)
+        main_layout.addWidget(self.sort_row)
+
         # ── ZIP row ──
         self.zip_row = FileBrowseRow(
-            label_text="ZIP",
+            label_text="发票ZIP",
             browse_mode="file",
             file_filter="ZIP 压缩包 (*.zip);;所有文件 (*)",
             placeholder="请选择发票ZIP压缩包...",
@@ -121,12 +148,6 @@ class MainWindow(QMainWindow):
         )
         self.output_dir_row.dir_changed.connect(self._on_output_dir_changed)
         main_layout.addWidget(self.output_dir_row)
-
-        # ── Rule selector ──
-        all_rules = RuleRegistry.list_rules() or [{"id": "rule_v1", "name": "Rule1"}]
-        self.rule_selector = RuleSelector(all_rules)
-        self.rule_selector.rule_changed.connect(self._on_rule_changed)
-        main_layout.addWidget(self.rule_selector)
 
         # ── Progress panel ──
         self.progress_panel = ProgressPanel()
@@ -152,9 +173,22 @@ class MainWindow(QMainWindow):
         rules = RuleRegistry.list_rules()
         if rules:
             self.current_rule_id = rules[0]["id"]
+            self._on_rule_changed(rules[0]["id"])
+
+    def _on_rule_changed(self, rule_id: str):
+        self.current_rule_id = rule_id
+        # Toggle sort file visibility for Rule2
+        if rule_id == "rule_v2":
+            self.sort_row.setVisible(True)
+            self.sort_row.label_text = "排序模板（请选择 Freight Invoice list 2026Fareast_merged.xlsx）"
+        else:
+            self.sort_row.setVisible(False)
 
     def _on_template_changed(self, path: str):
         self.template_path = path
+
+    def _on_sort_file_changed(self, path: str):
+        self.sort_file_path = path
 
     def _on_zip_changed(self, path: str):
         self.zip_path = path
@@ -162,35 +196,37 @@ class MainWindow(QMainWindow):
     def _on_output_dir_changed(self, path: str):
         self.output_dir = path
 
-    def _on_rule_changed(self, rule_id: str):
-        self.current_rule_id = rule_id
-
     def _on_log_message(self, message: str):
-        """Append log message from any thread (thread-safe via QMetaObject)."""
+        """Append log message from any thread."""
         self.log_panel.append_log(message)
 
     def _on_start(self):
         if self.is_processing:
             return
 
-        # Validate
+        # Validate common fields
         if not self.template_path:
             QMessageBox.warning(self, "提示", "请选择模板。")
             return
         if not self.zip_path:
-            QMessageBox.warning(self, "提示", "请选择ZIP文件。")
+            QMessageBox.warning(self, "提示", "请选择发票ZIP。")
             return
+
+        # Validate Rule2-specific fields
+        if self.current_rule_id == "rule_v2":
+            if not self.sort_file_path:
+                QMessageBox.warning(self, "提示", "Rule2需要选择排序模板\n（Freight Invoice list 2026Fareast_merged.xlsx）")
+                return
 
         # Use output_dir if set, otherwise fall back to template dir
         output_dir = self.output_dir
         if not output_dir:
-            from pathlib import Path
             output_dir = str(Path(self.template_path).parent)
+
         # Save for next launch
         self.config["last_output_dir"] = output_dir
         try:
             import json
-            from pathlib import Path
             config_path = Path(__file__).parent.parent / "config.json"
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=4, ensure_ascii=False)
@@ -210,6 +246,7 @@ class MainWindow(QMainWindow):
             self.zip_path,
             output_dir,
             self.current_rule_id,
+            sort_file_path=self.sort_file_path,
         )
         self._processing_thread.progress_update.connect(self._on_progress_update)
         self._processing_thread.finished_signal.connect(self._on_processing_done)

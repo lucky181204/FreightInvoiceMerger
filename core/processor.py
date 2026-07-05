@@ -1,8 +1,11 @@
-"""Main processor — orchestrates the entire invoice merging workflow."""
+"""Main processor — orchestrates the entire invoice merging workflow.
+
+Supports both Rule1 (openpyxl template, sorted write) and
+Rule2 (.xls template, page-aware write sorted by PO from merged file).
+"""
 
 import json
 import os
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -12,6 +15,7 @@ from utils.zip_helper import count_excel_in_zip
 from core.validator import validate_template, validate_zip
 from core.extractor import extract_all
 from core.writer import write_to_template
+from rules.registry import RuleRegistry
 
 
 def load_config() -> dict:
@@ -33,14 +37,11 @@ def load_config() -> dict:
     return defaults
 
 
-def get_output_path(output_dir: str, config: dict) -> str:
+def get_output_path(output_dir: str, base_name: str) -> str:
     """Generate output file path with auto-increment if exists."""
-    base_name = config.get("output_name", "Freight Invoice list 2026Fareast_Output.xlsx")
     output_path = Path(output_dir) / base_name
-
     if not output_path.exists():
         return str(output_path)
-
     stem = output_path.stem
     suffix = output_path.suffix
     counter = 1
@@ -62,7 +63,7 @@ class ProcessingResult:
 
 
 def open_file_location(file_path: str):
-    """Open the folder containing the file and select it (Windows only)."""
+    """Open the folder containing the file (Windows only)."""
     import platform
     if platform.system() == "Windows":
         try:
@@ -76,11 +77,12 @@ def run_processing(
     zip_path: str,
     rule_id: str,
     output_dir: str = "",
+    sort_file_path: str = "",
     progress_callback=None,
 ) -> ProcessingResult:
     """
     Main processing workflow.
-    Returns ProcessingResult with status, counts, output path, and elapsed time.
+    Dispatches to Rule1 or Rule2 logic based on rule_id.
     """
     result = ProcessingResult()
     start_time = time.time()
@@ -91,7 +93,12 @@ def run_processing(
 
     config = load_config()
 
-    # Step 1: Validate inputs
+    # ── Determine output directory ──
+    if not output_dir:
+        output_dir = str(Path(template_path).parent)
+    logger.info(f"输出目录：{output_dir}")
+
+    # ── Validate inputs ──
     progress("验证文件...")
     valid, msg = validate_template(template_path)
     if not valid:
@@ -105,12 +112,17 @@ def run_processing(
         logger.error(msg)
         return result
 
-    # Step 2: Determine output directory
-    if not output_dir:
-        output_dir = str(Path(template_path).parent)
-    logger.info(f"输出目录：{output_dir}")
+    # ── Route to Rule2 if applicable ──
+    if rule_id == "rule_v2":
+        return _run_rule2(template_path, zip_path, sort_file_path, output_dir, result, progress, config)
 
-    # Step 3: Count files
+    # ── Default: Rule1 path ──
+    return _run_rule1(template_path, zip_path, rule_id, output_dir, result, progress, config, start_time)
+
+
+def _run_rule1(template_path, zip_path, rule_id, output_dir, result, progress, config, start_time):
+    """Standard Rule1: extract → sort → write to openpyxl template."""
+
     logger.info("读取ZIP...")
     try:
         file_count = count_excel_in_zip(Path(zip_path))
@@ -120,7 +132,6 @@ def run_processing(
         logger.error(result.error_message)
         return result
 
-    # Step 4: Extract data
     progress("解压ZIP...")
     extract_dir = Path(tempfile.mkdtemp(prefix="invoice_"))
     try:
@@ -137,8 +148,7 @@ def run_processing(
         logger.error(result.error_message)
         return result
 
-    # Step 5: Write to template
-    output_path = get_output_path(output_dir, config)
+    output_path = get_output_path(output_dir, config.get("output_name", "Freight Invoice list 2026Fareast_Output.xlsx"))
     progress("写入模板...")
     try:
         write_to_template(
@@ -156,10 +166,51 @@ def run_processing(
     result.output_path = output_path
     result.elapsed = time.time() - start_time
 
-    # Step 6: Open file location
     if config.get("open_after_finish", True):
         open_file_location(output_path)
 
-    # Summary log
     logger.info(f"成功：{result.success_count}  失败：{result.error_count}  耗时：{result.elapsed:.1f}秒")
+    return result
+
+
+def _run_rule2(template_path, zip_path, sort_file_path, output_dir, result, progress, config):
+    """Rule2: sort by PO from merged.xlsx → write to .xls template with pagination."""
+
+    progress("解压ZIP...")
+    extract_dir = Path(tempfile.mkdtemp(prefix="invoice_v2_"))
+    try:
+        import zipfile
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(extract_dir)
+    except Exception as e:
+        result.error_message = f"ZIP解压失败：{e}"
+        logger.error(result.error_message)
+        return result
+
+    if not sort_file_path:
+        result.error_message = "Rule2需要选择排序模板（Freight Invoice list 2026Fareast_merged.xlsx）"
+        logger.error(result.error_message)
+        return result
+
+    try:
+        rule_module = RuleRegistry.get_rule("rule_v2")
+        out, success, errors = rule_module.write_sort_data_fn(
+            template_path, output_dir, str(extract_dir), sort_file_path,
+            progress_callback=lambda m: progress(m),
+        )
+        result.success_count = success
+        result.error_count = errors
+        result.output_path = out
+    except Exception as e:
+        result.error_message = f"Rule2处理失败：{e}"
+        logger.error(result.error_message)
+        return result
+
+    import time as tm
+    result.elapsed = tm.time() - (getattr(result, '_v2_start', tm.time()))
+
+    if config.get("open_after_finish", True) and result.output_path:
+        open_file_location(result.output_path)
+
+    logger.info(f"成功：{result.success_count}  失败：{result.error_count}")
     return result

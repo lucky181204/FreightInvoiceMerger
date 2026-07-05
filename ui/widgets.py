@@ -127,7 +127,8 @@ class OutputDirRow(QFrame):
 
 
 class RuleSelector(QFrame):
-    """Dropdown to select processing rule."""
+    """Dropdown to select processing rule.
+    Using QComboBox styled as a tab-like selection."""
 
     rule_changed = Signal(str)
 
@@ -139,13 +140,18 @@ class RuleSelector(QFrame):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
 
-        label = QLabel("规则")
+        label = QLabel("选择功能")
         label.setObjectName("sectionLabel")
         layout.addWidget(label)
 
         self.combo = QComboBox()
+        display_names = {
+            "rule_v1": "月发票清单 (Rule1)",
+            "rule_v2": "大发票 (Rule2)",
+        }
         for rule in rules:
-            self.combo.addItem(f"○ {rule['name']}", rule["id"])
+            name = display_names.get(rule["id"], rule["name"])
+            self.combo.addItem(name, rule["id"])
         self.combo.currentIndexChanged.connect(self._on_change)
         layout.addWidget(self.combo)
 

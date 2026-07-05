@@ -35,7 +35,10 @@ jobs:
             --add-data "resources;resources" `
             --add-data "config.json;." `
             --hidden-import "xlrd" `
+            --hidden-import "xlwt" `
+            --hidden-import "xlutils" `
             --hidden-import "rules.rule_v1" `
+            --hidden-import "rules.rule_v2" `
             --hidden-import "openpyxl" `
             --hidden-import "openpyxl.cell._writer" `
             --hidden-import "PySide6.QtCore" `

@@ -26,7 +26,7 @@ class RuleRegistry:
                 continue
             try:
                 mod = importlib.import_module(f"rules.{mod_name}")
-                if hasattr(mod, "RULE_META") and hasattr(mod, "FIELD_MAPPINGS"):
+                if hasattr(mod, "RULE_META") and (hasattr(mod, "FIELD_MAPPINGS") or hasattr(mod, "write_sort_data_fn")):
                     rule_id = mod.RULE_META["id"]
                     cls._rules[rule_id] = mod
             except Exception:
