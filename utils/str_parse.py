@@ -36,11 +36,15 @@ def after_comma(text: str) -> str:
 
 
 def before_v(text: str) -> str:
-    """Return text before 'V' or 'v' (case-insensitive), stripped."""
+    """Return text before 'V.' (V followed by dot), case-insensitive.
+    If no 'V.' found, return the original text stripped."""
     if not text:
         return ""
-    parts = re.split(r'[Vv]', text, maxsplit=1)
-    return parts[0].strip()
+    # Look for 'V.' pattern (case-insensitive) — this is the vessel version marker
+    match = re.search(r'[Vv]\.', text)
+    if match:
+        return text[:match.start()].strip()
+    return text.strip()
 
 
 def replace_line_break(text: str, replacement: str = "/") -> str:

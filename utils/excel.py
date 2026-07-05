@@ -90,7 +90,9 @@ def _parse_ref(ref: str) -> tuple[int, int]:
 
 
 def get_active_sheet(wb, fmt: str) -> SheetWrapper:
-    """Get the active/default sheet as a SheetWrapper."""
+    """Get the active/default sheet as a SheetWrapper.
+    For .xls with multiple sheets, uses the LAST sheet (newest data)."""
     if fmt == "xls":
-        return SheetWrapper(wb.sheet_by_index(0), fmt)
+        # Use the last sheet (contains the actual invoice data)
+        return SheetWrapper(wb.sheet_by_index(wb.nsheets - 1), fmt)
     return SheetWrapper(wb.active, fmt)
