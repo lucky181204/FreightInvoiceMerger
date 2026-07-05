@@ -56,13 +56,20 @@ FIELD_MAPPINGS = [
 
 def extract_value(sheet, mapping):
     """Extract a value from an invoice sheet according to the mapping.
-    All string parsing delegates to utils/str_parse.py."""
+    All string parsing delegates to utils/str_parse.py.
+
+    IMPORTANT: For "value" mode we preserve the original Python type.
+    For string modes we always return a string.
+    """
     mode = mapping["mode"]
 
     if mode == "value":
+        # Preserve original type (int/float for numbers, str for text)
         cell = sheet[mapping["source"]]
         v = cell.value
-        return "" if v is None else str(v)
+        if v is None:
+            return ""
+        return v  # Return as-is int, float, or str
 
     if mode == "after_colon":
         v = _get_cell(sheet, mapping["source"])

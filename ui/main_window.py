@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QMessageBox,
 )
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QMetaObject
 from PySide6.QtGui import QFont, QIcon
 
 from ui.widgets import FileBrowseRow, OutputDirRow, RuleSelector, ProgressPanel, LogPanel
@@ -166,7 +166,7 @@ class MainWindow(QMainWindow):
         self.current_rule_id = rule_id
 
     def _on_log_message(self, message: str):
-        """Append log message from any thread."""
+        """Append log message from any thread (thread-safe via QMetaObject)."""
         self.log_panel.append_log(message)
 
     def _on_start(self):

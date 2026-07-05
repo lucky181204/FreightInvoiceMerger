@@ -8,15 +8,17 @@ _EXCEL_EXTS = {".xlsx", ".xlsm", ".xltx", ".xls"}
 
 
 def extract_zip(zip_path: Path, extract_dir: Path) -> list[Path]:
-    """Extract a ZIP file and return paths to all Excel files found."""
+    """Extract a ZIP file and return paths to all Excel files found,
+    sorted by filename in natural ascending order."""
     extract_dir.mkdir(parents=True, exist_ok=True)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         zf.extractall(extract_dir)
 
     excel_files = sorted(
-        p for p in extract_dir.rglob("*")
-        if p.suffix.lower() in _EXCEL_EXTS and not p.name.startswith("~$")
+        (p for p in extract_dir.rglob("*")
+         if p.suffix.lower() in _EXCEL_EXTS and not p.name.startswith("~$")),
+        key=lambda p: p.name.lower(),  # case-insensitive sort
     )
     return excel_files
 

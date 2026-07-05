@@ -27,13 +27,12 @@ def before_comma_after_colon(text: str) -> str:
 
 def after_comma(text: str) -> str:
     """Return text after the first comma.
-    Assumes the caller has already extracted the relevant portion
-    (typically after colon)."""
+    If no comma found, return empty string (per spec)."""
     if not text:
         return ""
     if "," in text:
         return text.split(",", 1)[1].strip()
-    return text.strip()
+    return ""
 
 
 def before_v(text: str) -> str:
