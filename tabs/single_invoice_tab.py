@@ -76,7 +76,7 @@ class SingleInvoiceTab(QWidget):
         self.template_row = FileBrowseRow(
             label_text="选择 Freight Invoice 模板",
             browse_mode="file",
-            file_filter="Excel 文件 (*.xlsx *.xlsm *.xltx);;所有文件 (*)",
+            file_filter="Excel 文件 (*.xlsx *.xlsm *.xltx *.xls);;所有文件 (*)",
             placeholder="请选择Invoice模板...",
         )
         self.template_row.file_changed.connect(lambda p: setattr(self, 'template_path', p))
@@ -85,7 +85,7 @@ class SingleInvoiceTab(QWidget):
         self.draft_row = FileBrowseRow(
             label_text="选择 BL Draft",
             browse_mode="file",
-            file_filter="Excel 文件 (*.xlsx *.xlsm *.xltx);;所有文件 (*)",
+            file_filter="Word 文件 (*.docx *.doc);;所有文件 (*)",
             placeholder="请选择BL Draft...",
         )
         self.draft_row.file_changed.connect(lambda p: setattr(self, 'draft_path', p))
