@@ -29,12 +29,23 @@ def build():
         "--name", "FreightInvoiceMerger",
         "--add-data", f"resources{os.pathsep}resources",
         "--add-data", f"config.json{os.pathsep}.",
-        "--exclude-module", "xlwings",
+        "--exclude-module", "matplotlib",
+        "--exclude-module", "PIL",
         "--hidden-import", "xlrd",
         "--hidden-import", "xlwt",
         "--hidden-import", "xlutils",
+        "--hidden-import", "docx",
         "--hidden-import", "rules.rule_v1",
         "--hidden-import", "rules.rule_v2",
+        "--hidden-import", "single_invoice",
+        "--hidden-import", "single_invoice.parsers",
+        "--hidden-import", "single_invoice.services",
+        "--hidden-import", "single_invoice.parsers.draft_parser",
+        "--hidden-import", "single_invoice.parsers.manifest_parser",
+        "--hidden-import", "single_invoice.parsers.trade_terms_parser",
+        "--hidden-import", "single_invoice.services.hidden_sheet_service",
+        "--hidden-import", "single_invoice.services.invoice_merger",
+        "--hidden-import", "tabs.single_invoice_tab",
         "--hidden-import", "openpyxl",
         "--hidden-import", "openpyxl.cell._writer",
         "--hidden-import", "PySide6.QtCore",
@@ -43,7 +54,6 @@ def build():
         str(PROJECT_ROOT / "main.py"),
     ]
 
-    # Stream output directly so GitHub Actions log shows everything
     result = subprocess.run(cmd, cwd=PROJECT_ROOT)
     return result.returncode == 0
 
