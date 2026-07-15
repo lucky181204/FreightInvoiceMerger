@@ -2,6 +2,25 @@
 
 Extracts fields from BL Draft (.docx) file following defined rules.
 Draft contains two tables with shipping document data.
+
+Expected template cells and their format:
+  B5  = "Loading Port:{port},{country}"        (e.g. "Loading Port:SHANGHAI,CHINA")
+  B6  = "Destination: {port},{country}"          (e.g. "Destination: BUENAVENTURA,COLOMBIA")
+  B7  = "Shipment of: {qty}x{type}"             (e.g. "Shipment of: 1*40HQ")
+  H4  = "Invoice date:{date}"                   (e.g. "Invoice date:2026/7/15")
+  H5  = "ETD:{date}"                            (e.g. "ETD:2026/6/21")
+  H6  = "ATD:{date}"                            (e.g. "ATD:2026/6/21")
+  H7  = "Invoice #:{business_no}"               (e.g. "Invoice #:SE26060373")
+  B10 = "PRODUCT: {shipper_name}"               (e.g. "PRODUCT: HUNAN HAILI CHEMICAL INDUSTRY CO., LTD.")
+  B11 = "CLASS: {danger_class}"                 (e.g. "CLASS: 6.1 HAZ")
+  B12 = "Shipper: {goods_description}"           (e.g. "Shipper: METHOMYL TECH")
+  C10 = "PO{po}"                                (e.g. "PO4500019465")
+  D10 = "{booking_no}"                          (e.g. "EGLV142601959259")
+  E10 = "{vessel_voyage}"                       (e.g. "EVER LISSOME V.0788-074E")
+  F10+ = container_no
+  G10+ = container_type
+  H10+ = "USD"
+  B30 = TOTAL formula
 """
 
 import logging
@@ -9,38 +28,6 @@ import re
 from docx import Document
 
 logger = logging.getLogger(__name__)
-
-# ── Destination port → country mapping ──
-DESTINATION_COUNTRY_MAP = {
-    "SANTOS": "BRAZIL",
-    "BUENOS AIRES": "ARGENTINA",
-    "BUENAVENTURA": "COLOMBIA",
-    "MANZANILLO": "MEXICO",
-    "CARTAGENA": "COLOMBIA",
-    "VALPARAISO": "CHILE",
-    "LONG BEACH": "USA",
-    "LOS ANGELES": "USA",
-    "HOUSTON": "USA",
-    "NEW YORK": "USA",
-    "ROTTERDAM": "NETHERLANDS",
-    "HAMBURG": "GERMANY",
-    "ANTWERP": "BELGIUM",
-    "FELIXSTOWE": "UK",
-    "SHANGHAI": "CHINA",
-    "NINGBO": "CHINA",
-    "SHENZHEN": "CHINA",
-    "QINGDAO": "CHINA",
-    "BUENAVENTURA": "COLOMBIA",
-}
-
-
-def get_first_word(text: str) -> str:
-    """Return the first word of a text string."""
-    if not text:
-        return ""
-    text = text.strip()
-    parts = text.split()
-    return parts[0] if parts else ""
 
 
 def get_cell(table, row_idx: int, col_idx: int) -> str:
@@ -55,112 +42,97 @@ def extract_draft_data(draft_path: str) -> dict:
     """
     Extract all fields from BL Draft .docx file.
 
-    Draft Table 1 (booking info):
-      Row 0: OCEAN VESSEL VOYAGE → col 1 = E10 Vessel/Voyage
-      Row 1: BOOKING NO → col 1 = Booking ref
-      Row 2: SHIPPER → col 1 = Shipper name (B5 = first word of Shipper)
-      Row 5: PORT OF LOADING → col 1 = B10 Loading port; col 3 = B6 Port of Discharge
-      Row 7: DESCRIPTION → col 1 = B11 danger class; B12 first line
+    Draft Table 1 (booking info) — 9 rows x 4 cols:
+      Row 0: OCEAN VESSEL VOYAGE | {vessel}
+      Row 1: BOOKING NO. | {booking_no}
+      Row 2: SHIPPER: | {shipper_name}
+      Row 5: PORT OF LOADING: | {load_port} | PORT OF DISCHARGE: | {discharge_port}
+      Row 7: N/M | {goods_desc}
+      Row 8: SHIPPING TERMS: | {terms} | Bill of lading type: | {bl_type}
 
     Draft Table 2 (container info):
-      Row 0: EQU → Container count/type = B7
-      Row 1+: Container details
+      Row 0: EQU: | {container_info}  (e.g. "1*40HQ")
+      Row 1: Header
+      Row 2+: Container data
 
-    Draft Doc paragraph 1: D10 = Booking/Ref No
+    Returns dict with keys matching template cells.
     """
     doc = Document(draft_path)
-
-    # Find D10 from paragraph text or first table
-    d10_value = ""
-    for p in doc.paragraphs:
-        txt = p.text.strip()
-        # Look for booking ref / doc number patterns
-        if txt and not txt.startswith("CONFIRMATION") and not txt.startswith("OCEAN"):
-            d10_value = txt
-            break
-
     tables = doc.tables
     result = {}
 
     if len(tables) >= 1:
         t1 = tables[0]
-        logger.info(f"Table 1: {len(t1.rows)} rows x {len(t1.columns)} cols")
 
-        # ── E10: Vessel/Voyage (Row 0, col 1) ──
+        # E10: Vessel/Voyage (Row 0, col 1)
         result["E10"] = get_cell(t1, 0, 1)
 
-        # ── D10: Booking No (Row 1, col 1) ──
-        bl_no = get_cell(t1, 1, 1)
-        result["D10"] = bl_no if bl_no else d10_value
+        # D10: Booking No (Row 1, col 1)
+        result["D10"] = get_cell(t1, 1, 1)
 
-        # ── B5: First word of Shipper (Row 2, col 1) ──
-        shipper = get_cell(t1, 2, 1)
-        result["B5"] = get_first_word(shipper)
+        # Shipper name (Row 2, col 1) - used for PRODUCT field (B5 is the full org name)
+        shipper_name = get_cell(t1, 2, 1)
+        # Clean up multi-line: take first meaningful part
+        shipper_clean = shipper_name.split("\n")[0].strip().rstrip(",")
+        result["shipper"] = shipper_clean
 
-        # ── B6 Port of Loading: Row 5, col 1 ──
-        result["B10"] = get_cell(t1, 5, 1)
+        # First word of shipper for B5 prefix parsing
+        result["B5_first"] = shipper_clean.split()[0] if shipper_clean else ""
 
-        # ── B6: Port of Discharge: Row 5, col 3 ──
-        discharge_port = get_cell(t1, 5, 3)
-        result["B6_port"] = discharge_port
+        # B10: Loading Port (Row 5, col 1)
+        result["B10_loading_port"] = get_cell(t1, 5, 1)
 
-        # B6_country = mapped from destination port
-        port_upper = discharge_port.upper()
-        result["B6_country"] = DESTINATION_COUNTRY_MAP.get(port_upper, "")
+        # B6: Discharge Port (Row 5, col 3)
+        result["B6_discharge_port"] = get_cell(t1, 5, 3)
 
-        # ── B11/B12: Row 7 (description/danger class) ──
+        # B12: Goods description (Row 7, col 1) - first line
         desc_text = get_cell(t1, 7, 1)
-        result["B12"] = desc_text.split("\n")[0].strip() if desc_text else ""
-        result["B11"] = _extract_danger_class(desc_text)
+        desc_first_line = desc_text.split("\n")[0].strip() if desc_text else ""
+        result["B12_goods_desc"] = desc_first_line
+
+        # B11: Dangerous goods class extracted from description
+        result["B11_danger_class"] = _extract_danger_class_full(desc_text)
+
+        # B7: Container info from Table 2
+    else:
+        result["E10"] = ""
+        result["D10"] = ""
+        result["shipper"] = ""
+        result["B5_first"] = ""
+        result["B10_loading_port"] = ""
+        result["B6_discharge_port"] = ""
+        result["B12_goods_desc"] = ""
+        result["B11_danger_class"] = ""
 
     if len(tables) >= 2:
         t2 = tables[1]
-        logger.info(f"Table 2: {len(t2.rows)} rows x {len(t2.columns)} cols")
-        # ── B7: Container info (Row 0, col 1) ──
-        result["B7"] = get_cell(t2, 0, 1)
-
-    # Fallbacks
-    result.setdefault("B5", "")
-    result.setdefault("B6_port", "")
-    result.setdefault("B6_country", "")
-    result.setdefault("B7", "")
-    result.setdefault("B10", "")
-    result.setdefault("B11", "")
-    result.setdefault("B12", "")
-    result.setdefault("D10", d10_value)
-    result.setdefault("E10", "")
+        # Row 0, col 1 = container info (e.g. "1*40HQ")
+        result["B7_container"] = get_cell(t2, 0, 1)
+    else:
+        result["B7_container"] = ""
 
     return result
 
 
-def _extract_danger_class(text: str) -> str:
-    """Extract dangerous goods class from text like 'CLASS:9' or 'Class 9' or '9'."""
+def _extract_danger_class_full(text: str) -> str:
+    """Extract dangerous goods class number.
+    e.g. 'CLASS:6.1 UN NO:3077...' → '6.1'"""
     if not text:
         return ""
-    # Look for CLASS:9 or similar
-    m = re.search(r'(?:CLASS\s*[:：]\s*)(\d+(?:\.\d+)?)', text, re.IGNORECASE)
-    if m:
-        return m.group(1)
-    # Just look for a digit right after 'CLASS'
-    m = re.search(r'CLASS[^\d]*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
+    m = re.search(r'CLASS\s*[:：]?\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
     if m:
         return m.group(1)
     return ""
 
 
 def search_po_in_draft(draft_path: str, po: str) -> bool:
-    """
-    Search for PO string throughout entire Draft .docx.
-    Returns True if found, False if not.
-    """
+    """Search for PO string throughout entire Draft .docx."""
     if not po:
         return False
     doc = Document(draft_path)
-    # Search paragraphs
     for p in doc.paragraphs:
         if p.text and po in p.text:
             return True
-    # Search tables
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -170,10 +142,7 @@ def search_po_in_draft(draft_path: str, po: str) -> bool:
 
 
 def get_container_qty(text: str) -> int:
-    """
-    Extract container quantity from B7 text.
-    Examples: '1*20GP' → 1, '10*40HQ' → 10, '5*20GP+3*40HQ' → 8
-    """
+    """Extract container quantity from text like '1*40HQ' → 1."""
     if not text:
         return 0
     total = 0

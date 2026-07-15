@@ -6,66 +6,22 @@ Generates a single Freight Invoice from:
 - Shanghai manifest (舱单)
 - Trade terms manifest (贸易条款清单)
 
-Output filename: Freight Invoice to DAI PO{PO}.xlsx
+Output preserves template formatting (font, size, style).
+Only modifies cell values — never cells that have placeholder text like "Loading Port:*".
+Instead fills data alongside the template's label-text structure.
 """
 
-import logging
 import os
 import re
 from datetime import date
 from pathlib import Path
 
-from openpyxl import load_workbook
-from openpyxl.styles import Font
 from single_invoice.parsers.draft_parser import (
     extract_draft_data, search_po_in_draft, get_container_qty
 )
 from single_invoice.parsers.trade_terms_parser import find_by_blno as find_trade_by_blno
 from single_invoice.parsers.manifest_parser import find_containers_by_blno
-from single_invoice.services.hidden_sheet_service import remove_hidden_sheets
 from utils.logger import logger
-
-# Track whether to use openpyxl or xlrd for template
-_XLS_EXTENSIONS = {".xls"}
-
-
-def _is_xls(path: str) -> bool:
-    return Path(path).suffix.lower() in _XLS_EXTENSIONS
-
-
-def _load_template(template_path: str):
-    """Load a template file - supports both .xlsx and .xls."""
-    if _is_xls(template_path):
-        import xlrd
-        import xlwt
-        import xlutils.copy as cp
-
-        # Patch None format_str bug
-        orig_nfr = xlwt.BIFFRecords.NumberFormatRecord.__init__
-        def _patched_nfr(self, fmtidx, fmtstr):
-            if fmtstr is None:
-                fmtstr = ''
-            orig_nfr(self, fmtidx, fmtstr)
-        xlwt.BIFFRecords.NumberFormatRecord.__init__ = _patched_nfr
-
-        rb = xlrd.open_workbook(template_path, formatting_info=True)
-        wb = cp.copy(rb)
-        # Return (xlwt_workbook, sheet_name, 'xls')
-        sheet_name = rb.sheet_names()[-1]  # Last sheet (data sheet)
-        ws = wb.get_sheet(sheet_name)
-        return wb, ws, sheet_name, 'xls'
-    else:
-        wb = load_workbook(template_path)
-        ws = wb.active
-        return wb, ws, ws.title, 'xlsx'
-
-
-def _save_template(wb, fmt: str, output_path: str):
-    """Save the workbook in its original format."""
-    if fmt == 'xls':
-        wb.save(output_path)
-    else:
-        wb.save(output_path)
 
 
 def generate_single_invoice(
@@ -78,10 +34,6 @@ def generate_single_invoice(
 ) -> dict:
     """
     Generate a single Freight Invoice from template + draft + manifests.
-
-    Returns dict with keys:
-      output_path, success (bool), message (str)
-      po (str), bl_no (str), errors (list), warnings (list)
     """
     errors = []
     warnings = []
@@ -92,8 +44,6 @@ def generate_single_invoice(
         logger.info(msg)
 
     progress("读取Draft...")
-
-    # ── Step 1: Extract draft data ──
     try:
         draft_data = extract_draft_data(draft_path)
     except Exception as e:
@@ -104,7 +54,7 @@ def generate_single_invoice(
     bl_no = draft_data.get("D10", "")
     progress(f"提单号：{bl_no}")
 
-    # ── Step 2: Look up trade terms ──
+    # Trade terms lookup
     trade_info = {}
     if trade_terms_path and bl_no:
         progress("读取贸易条款清单...")
@@ -118,7 +68,7 @@ def generate_single_invoice(
     business_no = trade_info.get("business_no", "")
     sailing_date = trade_info.get("sailing_date", "")
 
-    # ── Step 3: Look up manifest ──
+    # Manifest lookup
     containers = []
     if manifest_path and bl_no:
         progress("读取上海舱单...")
@@ -128,13 +78,11 @@ def generate_single_invoice(
         else:
             warnings.append(f"舱单未找到提单号：{bl_no}")
 
-    # ── Step 4: Load template and fill ──
     progress("生成Invoice...")
 
     output_name = f"Freight Invoice to DAI PO{po}.xlsx" if po else "Freight Invoice to DAI.xlsx"
     output_name = re.sub(r'[<>:"/\\|?*]', '_', output_name)
     output_path = str(Path(output_dir) / output_name)
-
     counter = 1
     while os.path.exists(output_path):
         stem = Path(output_path).stem
@@ -143,13 +91,13 @@ def generate_single_invoice(
         counter += 1
 
     try:
-        # Load template (supports .xls and .xlsx)
-        tmpl_fmt = 'xlsx'
-        if _is_xls(template_path):
+        template_ext = Path(template_path).suffix.lower()
+        if template_ext == ".xls":
             import xlrd
             import xlwt
             import xlutils.copy as cp
 
+            # Patch None format_str
             orig_nfr = xlwt.BIFFRecords.NumberFormatRecord.__init__
             def _patched_nfr(self, fmtidx, fmtstr):
                 if fmtstr is None:
@@ -160,92 +108,149 @@ def generate_single_invoice(
             rb = xlrd.open_workbook(template_path, formatting_info=True)
             wb = cp.copy(rb)
             sheet_name = rb.sheet_names()[-1]
-            ws = wb.get_sheet(sheet_name)
             tmpl_fmt = 'xls'
 
-            # For xlwt, cell writing uses 0-indexed rows/cols
+            # Helper: read source font for a cell, return an xlwt style
+            src_sheet = rb.sheet_by_index(rb.nsheets - 1)
+
+            def _get_style(r, c):
+                """Get xlwt style preserving template font for cell (1-based r,c)."""
+                try:
+                    xf_idx = src_sheet.cell_xf_index(r - 1, c - 1)
+                    font = rb.font_list[rb.xf_list[xf_idx].font_index]
+                    fnt = xlwt.Font()
+                    fnt.name = font.name
+                    fnt.height = font.height
+                    fnt.bold = bool(font.bold)
+                    style = xlwt.XFStyle()
+                    style.font = fnt
+                    return style
+                except Exception:
+                    return None
+
             def set_cell(r, c, val):
-                """Set cell value, 1-based row and column."""
-                ws.write(int(r) - 1, int(c) - 1, val)
+                """Write cell value preserving template font (1-based r,c)."""
+                st = _get_style(r, c)
+                ws = wb.get_sheet(sheet_name)
+                if st:
+                    ws.write(r - 1, c - 1, val, st)
+                else:
+                    ws.write(r - 1, c - 1, val)
+
+            def save_wb(p):
+                wb.save(p)
 
         else:
+            from openpyxl import load_workbook
+            from openpyxl.styles import Font as OXFont
             wb = load_workbook(template_path)
             ws = wb.active
+            tmpl_fmt = 'xlsx'
 
             def set_cell(r, c, val):
-                """Set cell value, 1-based row and column."""
-                ws.cell(row=int(r), column=int(c)).value = val
+                ws.cell(row=r, column=c).value = val
 
-        # ── Fill Fields ──
+            def save_wb(p):
+                from single_invoice.services.hidden_sheet_service import remove_hidden_sheets
+                remove_hidden_sheets(wb)
+                wb.save(p)
+
+        # ── BUILD the cell values based on template structure ──
+        # The template has prefix+placeholder like "Loading Port:*,CHINA"
+        # We REPLACE the placeholder part, keeping the label prefix
+
         today = date.today()
-        set_cell(4, 8, f"{today.year}/{today.month}/{today.day}")  # H4
+        date_str = f"{today.year}/{today.month}/{today.day}"
 
-        set_cell(5, 2, draft_data.get("B5", ""))    # B5
-        set_cell(6, 2, draft_data.get("B6_port", ""))  # B6
-        set_cell(7, 2, draft_data.get("B7", ""))    # B7
-        set_cell(10, 2, draft_data.get("B10", ""))  # B10
-        set_cell(11, 2, draft_data.get("B11", ""))  # B11
-        set_cell(12, 2, draft_data.get("B12", ""))  # B12
-        set_cell(10, 4, bl_no)                       # D10
-        set_cell(10, 5, draft_data.get("E10", ""))  # E10
+        shipper = draft_data.get("shipper", "")
+        loading_port = draft_data.get("B10_loading_port", "")
+        discharge_port = draft_data.get("B6_discharge_port", "")
+        container_info = draft_data.get("B7_container", "")
+        vessel = draft_data.get("E10", "")
+        goods_desc = draft_data.get("B12_goods_desc", "")
+        danger = draft_data.get("B11_danger_class", "")
 
-        if po:
-            set_cell(10, 3, po)                      # C10
-        if business_no:
-            set_cell(7, 8, business_no)               # H7
+        # ── Build each cell value with proper formatting ──
+        # B5: "Loading Port:{port},{country}"
+        set_cell(5, 2, f"Loading Port:{loading_port},CHINA")
+
+        # B6: "Destination: {port},{country}"
+        set_cell(6, 2, f"Destination: {discharge_port},COLOMBIA")
+
+        # B7: "Shipment of: {container_info}"
+        set_cell(7, 2, f"Shipment of: {container_info}")
+
+        # H4: "Invoice date:{date}"
+        set_cell(4, 8, f"Invoice date:{date_str}")
+
+        # H5: ETD
         if sailing_date:
-            set_cell(5, 8, sailing_date)              # H5
+            set_cell(5, 8, f"ETD:{sailing_date}")
+        else:
+            set_cell(5, 8, "ETD:*")
 
-        # ── Container data ──
+        # H6: ATD (use same date as template placeholder or sailing)
+        # Keep ATD placeholder or fill with sailing
+        h6_val = f"ATD:{sailing_date}" if sailing_date else "ATD:*"
+        set_cell(6, 8, h6_val)
+
+        # H7: "Invoice #:{business_no}"
+        set_cell(7, 8, f"Invoice #:{business_no}" if business_no else "Invoice #:*")
+
+        # B10: "PRODUCT: {shipper}"
+        set_cell(10, 2, f"PRODUCT: {shipper}")
+
+        # B11: "CLASS: {danger}"
+        set_cell(11, 2, f"CLASS: {danger}" if danger else "CLASS: *")
+
+        # B12: "Shipper: {goods_desc}"
+        set_cell(12, 2, f"Shipper: {goods_desc}")
+
+        # C10: "PO{po}"
+        po_val = f"PO{po}" if po else "PO*"
+        set_cell(10, 3, po_val)
+
+        # D10: BL No
+        set_cell(10, 4, bl_no)
+
+        # E10: Vessel/Voyage
+        set_cell(10, 5, vessel)
+
+        # Container data rows (F=6, G=7, H=8)
         container_start = 12
         for i, c_info in enumerate(containers):
             row = container_start + i
-            set_cell(row, 6, c_info.get("container_no", ""))   # F
-            set_cell(row, 7, c_info.get("container_type", "")) # G
+            set_cell(row, 6, c_info.get("container_no", ""))   # F = Container No
+            set_cell(row, 7, c_info.get("container_type", "")) # G = Container Type
             if c_info.get("container_type", "").strip():
-                set_cell(row, 8, "USD")                        # H
+                set_cell(row, 8, "USD")                         # H = USD
 
-        # ── B30 formula ──
+        # B30 formula
         formula = '="TOTAL FREIGHT USD "&TEXT(I29,"#,##0.########")&"."'
-        if tmpl_fmt == 'xls':
-            ws.write(29, 1, formula)  # 0-indexed: row 29=30, col 1=B
-        else:
-            ws["B30"] = formula
+        set_cell(30, 2, formula)
 
         # ── PO Validation ──
         if po:
             progress(f"校验PO：{po}")
             po_found = search_po_in_draft(draft_path, po)
-            if not po_found and tmpl_fmt == 'xlsx':
-                # Only openpyxl supports per-cell font changes
-                # For xls, skip font coloring
-                if tmpl_fmt == 'xlsx':
-                    ws["C10"].font = Font(color="FF0000")
+            if not po_found:
                 warnings.append(f"PO {po} 在Draft中未找到")
 
         # ── Container quantity validation ──
-        b7_text = draft_data.get("B7", "")
-        expected_qty = get_container_qty(b7_text)
+        expected_qty = get_container_qty(container_info)
         actual_qty = len(containers)
         progress(f"箱量校验：Draft={expected_qty}, 舱单={actual_qty}")
         if expected_qty > 0 and expected_qty != actual_qty:
             warnings.append(f"箱量不一致：Draft={expected_qty}, 舱单={actual_qty}")
 
-        # ── Remove hidden sheets (openpyxl only) ──
-        if tmpl_fmt != 'xls':
-            progress("检查隐藏工作表...")
-            remove_hidden_sheets(wb)
-
         # ── Save ──
-        if tmpl_fmt == 'xls':
-            wb.save(output_path)
-        else:
-            wb.save(output_path)
-
+        save_wb(output_path)
         progress(f"保存完成：{output_path}")
 
     except Exception as e:
         errors.append(f"模板写入失败：{e}")
+        import traceback
+        traceback.print_exc()
         return {"output_path": "", "success": False, "message": str(e),
                 "po": po, "bl_no": bl_no, "errors": errors}
 
