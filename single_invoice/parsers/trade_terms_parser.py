@@ -79,11 +79,21 @@ def find_by_blno(manifest_path: str, bl_no: str) -> dict | None:
                 if sail_col:
                     sv = ws.cell(row=r, column=sail_col).value
                     if sv:
-                        # Handle datetime object
+                        # Handle datetime object or string like '2026-06-21 00:00:00'
                         if hasattr(sv, 'strftime'):
-                            result["sailing_date"] = sv.strftime("%Y/%m/%d")
+                            result["sailing_date"] = sv.strftime("%Y/%#d/%#d" if str(sv.month).zfill(2) else "%Y/%#m/%#d").replace('/0', '/')
+                            # Proper no-zero-padding format
+                            result["sailing_date"] = f"{sv.year}/{sv.month}/{sv.day}"
                         else:
-                            result["sailing_date"] = str(sv).strip()
+                            date_str = str(sv).strip()
+                            # Convert '2026-06-21 00:00:00' → '2026/6/21'
+                            # Convert '2026/06/21' → '2026/6/21'
+                            import re
+                            m = re.match(r'(\d{4})[-/]0?(\d{1,2})[-/]0?(\d{1,2})', date_str)
+                            if m:
+                                result["sailing_date"] = f"{m.group(1)}/{int(m.group(2))}/{int(m.group(3))}"
+                            else:
+                                result["sailing_date"] = date_str
                     else:
                         result["sailing_date"] = ""
                 wb.close()

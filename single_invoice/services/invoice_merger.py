@@ -216,10 +216,9 @@ def generate_single_invoice(
         # E10: Vessel/Voyage
         set_cell(10, 5, vessel)
 
-        # Container data rows (F=6, G=7, H=8)
-        container_start = 12
+        # Container data rows (F=6, G=7, H=8) — same row as B10/C10/D10/E10
         for i, c_info in enumerate(containers):
-            row = container_start + i
+            row = 10  # Container data goes on row 10, same as BL info
             set_cell(row, 6, c_info.get("container_no", ""))   # F = Container No
             set_cell(row, 7, c_info.get("container_type", "")) # G = Container Type
             if c_info.get("container_type", "").strip():

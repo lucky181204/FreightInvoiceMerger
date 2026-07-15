@@ -115,13 +115,23 @@ def extract_draft_data(draft_path: str) -> dict:
 
 
 def _extract_danger_class_full(text: str) -> str:
-    """Extract dangerous goods class number.
-    e.g. 'CLASS:6.1 UN NO:3077...' → '6.1'"""
+    """Extract dangerous goods class like '6.1 HAZ' from draft description.
+    e.g. 'METHOMYL TECH\n...\nCLASS:6.1 UN NO:3077...' → '6.1 HAZ'"""
     if not text:
         return ""
-    m = re.search(r'CLASS\s*[:：]?\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
+    # Match 'CLASS:6.1 UN' → we want '6.1 HAZ'
+    # The draft says CLASS:6.1 UN NO:3077, the correct file says CLASS: 6.1 HAZ
+    # HAZ comes from the UN hazard class description
+    m = re.search(r'CLASS\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(\w+)?', text, re.IGNORECASE)
     if m:
-        return m.group(1)
+        cls_num = m.group(1)
+        suffix = (m.group(2) or "").upper()
+        # If suffix is UN, replace with HAZ (as shown in correct file)
+        if suffix == "UN":
+            return f"{cls_num} HAZ"
+        elif suffix:
+            return f"{cls_num} {suffix}"
+        return cls_num
     return ""
 
 
