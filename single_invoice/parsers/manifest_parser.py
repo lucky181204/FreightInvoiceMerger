@@ -118,9 +118,9 @@ def find_containers_by_blno(manifest_path: str, bl_no: str, progress_callback=No
     if bl_col:
         log(f"提单号列: {_col_letter(bl_col)}")
 
-    # Step 3: Read data rows
+    # Step 3: Read data rows — scan ALL rows, filter by BL match when available
+    # No empty-row limit: manifests often have blank rows between different BLs
     results = []
-    empty_count = 0
     in_matching_bl = not bl_col  # If no BL column, match all rows
     current_bl = None
     max_row = ws.max_row
@@ -129,13 +129,9 @@ def find_containers_by_blno(manifest_path: str, bl_no: str, progress_callback=No
         # Read cell values
         cntr_val = ws.cell(row=r, column=cntr_col).value
 
-        # Check for end conditions
+        # Check for end conditions — skip empty rows but don't stop scanning
         if cntr_val is None or str(cntr_val).strip() == "":
-            empty_count += 1
-            if empty_count >= EMPTY_ROW_LIMIT:
-                break
             continue
-        empty_count = 0
 
         # Check for total/summary row
         cntr_str = str(cntr_val).strip()
