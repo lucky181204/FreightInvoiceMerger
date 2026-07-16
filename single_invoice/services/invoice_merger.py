@@ -170,12 +170,12 @@ def generate_single_invoice(
         vessel = draft_data.get("E10", "")
         danger = draft_data.get("B11_danger_class", "")
 
-        # ── Build each cell value ──
-        # B5: "Loading Port:{port}" — first word only, no country suffix
+        # ── Build each cell value — only replace the * placeholder ──
+        # Template: "Loading Port:*,CHINA" → replace * with first word
         b5_first_word = loading_port.split()[0].split(",")[0].strip() if loading_port else ""
-        set_cell(5, 2, f"Loading Port:{b5_first_word}")
+        set_cell(5, 2, f"Loading Port:{b5_first_word},CHINA")
 
-        # B6: "Destination: {port},{country}" — with mapped country
+        # B6: "Destination: *,*" → replace first * with port, second * with country
         set_cell(6, 2, f"Destination: {destination},{country}")
 
         # B7: "Shipment of: {container_info}"
