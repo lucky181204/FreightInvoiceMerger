@@ -71,8 +71,8 @@ def generate_single_invoice(
     # Manifest lookup
     containers = []
     if manifest_path and bl_no:
-        progress("读取上海舱单...")
-        containers = find_containers_by_blno(manifest_path, bl_no)
+        progress("读取舱单...")
+        containers = find_containers_by_blno(manifest_path, bl_no, progress_callback=progress)
         if containers:
             progress(f"找到{len(containers)}个集装箱")
         else:

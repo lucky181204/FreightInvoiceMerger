@@ -159,16 +159,23 @@ def extract_cargo_class(cell_text: str) -> str:
 
     lines = [line.strip() for line in cell_text.splitlines() if line.strip()]
 
-    slash_pattern = re.compile(r"(\d+(?:\.\d+)?)\s*/\s*(\d{4})")
-    class_pattern = re.compile(r"\bCLASS\b\s*[:：]?\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
+    slash_pattern = re.compile(r"(\d+(?:\.\d+)?)\s*/\s*(\d{4})(?!\d)")
+    class_pattern = re.compile(
+        r"\b(?:CLASS|CL)\b"
+        r"\s*[.:：-]?\s*"
+        r"(\d+(?:\.\d+)?)",
+        re.IGNORECASE
+    )
 
-    # Priority 1: slash format
+    # Priority 1: exactly one / and /后面的4位数字
     for line in lines:
+        if line.count("/") != 1:
+            continue
         m = slash_pattern.search(line)
         if m:
             return f"{m.group(1)} HAZ"
 
-    # Priority 2: CLASS keyword
+    # Priority 2: CLASS or CL keyword
     for line in lines:
         m = class_pattern.search(line)
         if m:
