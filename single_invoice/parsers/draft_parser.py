@@ -90,16 +90,19 @@ def extract_draft_data(draft_path: str) -> dict:
         # Per spec: B12 = Draft Table 1 Row 3 (0-indexed row 2) Col 2 → Shipper name
         result["shipper_name"] = first_nonempty_line(get_cell(t1, 2, 1))
 
-        # B5 first word (for Loading Port prefix)
-        result["B5_first"] = result["shipper_name"].split()[0] if result["shipper_name"] else ""
+        # B5 first word of Loading Port (first word, before any comma or space)
+        raw_b10 = get_cell(t1, 5, 1)
+        b5_first = raw_b10.split()[0].split(",")[0].strip() if raw_b10 else ""
+        result["B5_first"] = b5_first
 
-        # B10: Loading Port (Row 5/PORT OF LOADING, col 1)
-        result["B10_loading_port"] = get_cell(t1, 5, 1)
+        # B10: Loading Port full text (Row 5/PORT OF LOADING, col 1)
+        result["B10_loading_port"] = raw_b10
 
         # ── B6: Discharge Port (Row 5, col 3)
-        # Take first line, if comma take before comma, uppercase, then map
+        # Take first line, first word only (before comma and space)
         raw_dest = get_cell(t1, 5, 3)
-        destination = normalize_destination(raw_dest)
+        dest_first_word = raw_dest.split()[0].split(",")[0].strip().upper() if raw_dest else ""
+        destination = dest_first_word
         country = DESTINATION_COUNTRY_MAP.get(destination, "ERROR")
         result["B6_destination"] = destination
         result["B6_country"] = country
@@ -132,14 +135,13 @@ def extract_draft_data(draft_path: str) -> dict:
 
 
 def normalize_destination(value: str) -> str:
-    """
-    Extract destination port from raw cell text.
+    """Extract destination port from raw cell text.
     - First non-empty line
-    - If comma, take before comma
+    - If comma or space, take the first word (before first space or comma)
     - Strip, uppercase
     """
     first_line = first_nonempty_line(value)
-    destination = first_line.split(",", 1)[0].strip().upper()
+    destination = first_line.split()[0].split(",", 1)[0].strip().upper() if first_line else ""
     return destination
 
 

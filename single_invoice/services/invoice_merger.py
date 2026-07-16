@@ -171,8 +171,9 @@ def generate_single_invoice(
         danger = draft_data.get("B11_danger_class", "")
 
         # ── Build each cell value ──
-        # B5: "Loading Port:{port},{country}"
-        set_cell(5, 2, f"Loading Port:{loading_port},CHINA")
+        # B5: "Loading Port:{port}" — first word only, no country suffix
+        b5_first_word = loading_port.split()[0].split(",")[0].strip() if loading_port else ""
+        set_cell(5, 2, f"Loading Port:{b5_first_word}")
 
         # B6: "Destination: {port},{country}" — with mapped country
         set_cell(6, 2, f"Destination: {destination},{country}")
