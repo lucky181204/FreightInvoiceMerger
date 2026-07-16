@@ -115,24 +115,43 @@ def extract_draft_data(draft_path: str) -> dict:
 
 
 def _extract_danger_class_full(text: str) -> str:
-    """Extract dangerous goods class like '6.1 HAZ' from draft description.
-    e.g. 'METHOMYL TECH\n...\nCLASS:6.1 UN NO:3077...' → '6.1 HAZ'"""
+    """
+    Extract cargo class from draft description cell text.
+
+    Logic:
+    1. Split text by lines, only consider non-empty lines
+    2. Only inspect lines containing CLASS or UN NO / UN NUMBER keywords
+    3. Find lines with exactly 2 numbers where:
+       - One is a 4-digit integer (UN number)
+       - The other is NOT 4 digits (the danger class: 9, 6.1, etc.)
+    4. Return "number HAZ" or "GENERAL CARGO"
+
+    Examples:
+      "CLASS:9 UN NO:3077"           -> "9 HAZ"
+      "CLASS:6.1 UN NO:2757"         -> "6.1 HAZ"
+      "METHOMYL TECH\n400 DRUMS"     -> "GENERAL CARGO"
+      ""                              -> "GENERAL CARGO"
+    """
     if not text:
-        return ""
-    # Match 'CLASS:6.1 UN' → we want '6.1 HAZ'
-    # The draft says CLASS:6.1 UN NO:3077, the correct file says CLASS: 6.1 HAZ
-    # HAZ comes from the UN hazard class description
-    m = re.search(r'CLASS\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(\w+)?', text, re.IGNORECASE)
-    if m:
-        cls_num = m.group(1)
-        suffix = (m.group(2) or "").upper()
-        # If suffix is UN, replace with HAZ (as shown in correct file)
-        if suffix == "UN":
-            return f"{cls_num} HAZ"
-        elif suffix:
-            return f"{cls_num} {suffix}"
-        return cls_num
-    return ""
+        return "GENERAL CARGO"
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    candidate_lines = [
+        line for line in lines
+        if re.search(r'\bCLASS\b|UN\s*NO\.?|UN\s*NUMBER', line, re.IGNORECASE)
+    ]
+
+    for line in candidate_lines:
+        numbers = re.findall(r'(?<![\d.])\d+(?:\.\d+)?(?![\d.])', line)
+
+        four_digit = [n for n in numbers if re.fullmatch(r'\d{4}', n)]
+        other = [n for n in numbers if not re.fullmatch(r'\d{4}', n)]
+
+        if len(numbers) == 2 and len(four_digit) == 1 and len(other) == 1:
+            return f"{other[0]} HAZ"
+
+    return "GENERAL CARGO"
 
 
 def search_po_in_draft(draft_path: str, po: str) -> bool:

@@ -225,7 +225,7 @@ def generate_single_invoice(
                 set_cell(row, 8, "USD")                         # H = USD
 
         # B30 formula
-        formula = '="TOTAL FREIGHT USD "&TEXT(I29,"#,##0.########")&"."'
+        formula = '="TOTAL FREIGHT USD"&TEXT(I29,"#,##0.########")&"."'
         set_cell(30, 2, formula)
 
         # ── PO Validation ──
