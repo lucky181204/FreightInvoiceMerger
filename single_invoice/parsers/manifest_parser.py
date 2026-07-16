@@ -65,12 +65,14 @@ def is_bl_no_header(value) -> bool:
 
 
 def _is_label_row(text: str) -> bool:
-    """Check if row text is a label/fee row, not a container number."""
+    """Check if row text is a label/fee row, not a container number.
+    Uses content-based detection: container numbers must contain both letters and digits."""
     u = text.upper()
+    # Skip fee/label rows
     if any(kw in u for kw in ['PAYMENT', 'FREIGHT', 'CHARGE', 'OCEAN', 'ORIGIN',
                               'DESTINATION', 'SPECIAL', 'REMARK', 'TOTAL']):
         return True
-    # Container numbers must contain both letters and digits
+    # Container number requires strong mix of letters + digits (>=4 consecutive)
     if not (re.search(r'[A-Z]{2,}', u) and re.search(r'\d{4,}', text)):
         return True
     return False
