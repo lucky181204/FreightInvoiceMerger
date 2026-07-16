@@ -64,6 +64,18 @@ def is_bl_no_header(value) -> bool:
     return False
 
 
+def _is_label_row(text: str) -> bool:
+    """Check if row text is a label/fee row, not a container number."""
+    u = text.upper()
+    if any(kw in u for kw in ['PAYMENT', 'FREIGHT', 'CHARGE', 'OCEAN', 'ORIGIN',
+                              'DESTINATION', 'SPECIAL', 'REMARK', 'TOTAL']):
+        return True
+    # Container numbers must contain both letters and digits
+    if not (re.search(r'[A-Z]{2,}', u) and re.search(r'\d{4,}', text)):
+        return True
+    return False
+
+
 def find_containers_by_blno(manifest_path: str, bl_no: str, progress_callback=None) -> list[dict]:
     """
     Search manifest file for container data matching BL No.
@@ -120,8 +132,23 @@ def find_containers_by_blno(manifest_path: str, bl_no: str, progress_callback=No
 
     # Step 3: Read data rows — scan ALL rows, filter by BL match when available
     # No empty-row limit: manifests often have blank rows between different BLs
+
+    # Detect if BL is a fixed value in header area (not per-row)
+    # If BL header row is >5 rows above data start, treat BL as fixed
+    bl_fixed_value = None
+    if bl_col and (best.get("bl_row", 0) + 5 < data_start):
+        # Try to find BL value near the BL header
+        for sr in range(max(1, best["bl_row"] - 1), best["bl_row"] + 3):
+            for sc in range(max(1, bl_col - 1), min(bl_col + 3, ws.max_column + 1)):
+                cv = ws.cell(row=sr, column=sc).value
+                if cv and str(cv).strip() == bl_no:
+                    bl_fixed_value = bl_no
+                    break
+            if bl_fixed_value:
+                break
+
     results = []
-    in_matching_bl = not bl_col  # If no BL column, match all rows
+    in_matching_bl = not bl_col or bool(bl_fixed_value)
     current_bl = None
     max_row = ws.max_row
 
@@ -138,10 +165,14 @@ def find_containers_by_blno(manifest_path: str, bl_no: str, progress_callback=No
         if cntr_str.upper() in ("TOTAL", "合计", "总计"):
             break
 
-        # BL No filtering
-        if bl_col:
+        # Skip obvious non-container rows (labels, fees, etc.)
+        if _is_label_row(cntr_str):
+            continue
+
+        # BL No filtering — skip if BL is fixed (already matched all)
+        if bl_col and not bl_fixed_value:
             bl_val = ws.cell(row=r, column=bl_col).value
-            if bl_val and str(bl_val).strip():
+            if bl_val is not None and str(bl_val).strip():
                 current_bl = str(bl_val).strip()
                 in_matching_bl = (current_bl == bl_no)
 
