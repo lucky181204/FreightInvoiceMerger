@@ -156,26 +156,26 @@ def generate_single_invoice(
                 wb.save(p)
 
         # ── BUILD the cell values based on template structure ──
-        # The template has prefix+placeholder like "Loading Port:*,CHINA"
-        # We REPLACE the placeholder part, keeping the label prefix
 
         today = date.today()
         date_str = f"{today.year}/{today.month}/{today.day}"
 
-        shipper = draft_data.get("shipper", "")
+        # New draft keys from the updated parser
+        shipper_name = draft_data.get("shipper_name", "")
+        product_name = draft_data.get("product_name", "")
         loading_port = draft_data.get("B10_loading_port", "")
-        discharge_port = draft_data.get("B6_discharge_port", "")
+        destination = draft_data.get("B6_destination", "")
+        country = draft_data.get("B6_country", "")
         container_info = draft_data.get("B7_container", "")
         vessel = draft_data.get("E10", "")
-        goods_desc = draft_data.get("B12_goods_desc", "")
         danger = draft_data.get("B11_danger_class", "")
 
-        # ── Build each cell value with proper formatting ──
+        # ── Build each cell value ──
         # B5: "Loading Port:{port},{country}"
         set_cell(5, 2, f"Loading Port:{loading_port},CHINA")
 
-        # B6: "Destination: {port},{country}"
-        set_cell(6, 2, f"Destination: {discharge_port},COLOMBIA")
+        # B6: "Destination: {port},{country}" — with mapped country
+        set_cell(6, 2, f"Destination: {destination},{country}")
 
         # B7: "Shipment of: {container_info}"
         set_cell(7, 2, f"Shipment of: {container_info}")
@@ -184,31 +184,25 @@ def generate_single_invoice(
         set_cell(4, 8, f"Invoice date:{date_str}")
 
         # H5: ETD
-        if sailing_date:
-            set_cell(5, 8, f"ETD:{sailing_date}")
-        else:
-            set_cell(5, 8, "ETD:*")
+        set_cell(5, 8, f"ETD:{sailing_date}" if sailing_date else "ETD:*")
 
-        # H6: ATD (use same date as template placeholder or sailing)
-        # Keep ATD placeholder or fill with sailing
-        h6_val = f"ATD:{sailing_date}" if sailing_date else "ATD:*"
-        set_cell(6, 8, h6_val)
+        # H6: ATD
+        set_cell(6, 8, f"ATD:{sailing_date}" if sailing_date else "ATD:*")
 
         # H7: "Invoice #:{business_no}"
         set_cell(7, 8, f"Invoice #:{business_no}" if business_no else "Invoice #:*")
 
-        # B10: "PRODUCT: {shipper}"
-        set_cell(10, 2, f"PRODUCT: {shipper}")
+        # B10: "PRODUCT: {product_name}" — from Row 8 Col 2 first line
+        set_cell(10, 2, f"PRODUCT: {product_name}")
 
         # B11: "CLASS: {danger}"
         set_cell(11, 2, f"CLASS: {danger}" if danger else "CLASS: *")
 
-        # B12: "Shipper: {goods_desc}"
-        set_cell(12, 2, f"Shipper: {goods_desc}")
+        # B12: "Shipper: {shipper_name}" — from Row 3 Col 2 first line
+        set_cell(12, 2, f"Shipper: {shipper_name}")
 
         # C10: "PO{po}"
-        po_val = f"PO{po}" if po else "PO*"
-        set_cell(10, 3, po_val)
+        set_cell(10, 3, f"PO{po}" if po else "PO*")
 
         # D10: BL No
         set_cell(10, 4, bl_no)
@@ -216,15 +210,16 @@ def generate_single_invoice(
         # E10: Vessel/Voyage
         set_cell(10, 5, vessel)
 
-        # Container data rows (F=6, G=7, H=8) — same row as B10/C10/D10/E10
+        # Container data rows (F=6, G=7, H=8) — dynamic rows starting at 10
         for i, c_info in enumerate(containers):
-            row = 10  # Container data goes on row 10, same as BL info
+            row = 10 + i
+            c_type = c_info.get("container_type", "").strip()
             set_cell(row, 6, c_info.get("container_no", ""))   # F = Container No
-            set_cell(row, 7, c_info.get("container_type", "")) # G = Container Type
-            if c_info.get("container_type", "").strip():
+            set_cell(row, 7, c_type)                            # G = Container Type
+            if c_type:
                 set_cell(row, 8, "USD")                         # H = USD
 
-        # B30 formula
+        # B30 formula — NO space after "USD" per spec
         formula = '="TOTAL FREIGHT USD"&TEXT(I29,"#,##0.########")&"."'
         set_cell(30, 2, formula)
 
