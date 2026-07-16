@@ -99,10 +99,9 @@ def extract_draft_data(draft_path: str) -> dict:
         result["B10_loading_port"] = raw_b10
 
         # ── B6: Discharge Port (Row 5, col 3)
-        # Take first line, first word only (before comma and space)
+        # Take first line, if comma take before comma, uppercase, then map
         raw_dest = get_cell(t1, 5, 3)
-        dest_first_word = raw_dest.split()[0].split(",")[0].strip().upper() if raw_dest else ""
-        destination = dest_first_word
+        destination = normalize_destination(raw_dest)
         country = DESTINATION_COUNTRY_MAP.get(destination, "ERROR")
         result["B6_destination"] = destination
         result["B6_country"] = country
@@ -137,11 +136,11 @@ def extract_draft_data(draft_path: str) -> dict:
 def normalize_destination(value: str) -> str:
     """Extract destination port from raw cell text.
     - First non-empty line
-    - If comma or space, take the first word (before first space or comma)
+    - If comma, take before comma
     - Strip, uppercase
     """
     first_line = first_nonempty_line(value)
-    destination = first_line.split()[0].split(",", 1)[0].strip().upper() if first_line else ""
+    destination = first_line.split(",", 1)[0].strip().upper() if first_line else ""
     return destination
 
 
