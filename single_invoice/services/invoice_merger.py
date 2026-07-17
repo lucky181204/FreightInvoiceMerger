@@ -148,15 +148,8 @@ def generate_single_invoice(
                 else:
                     ws.write(r - 1, c - 1, val)
 
-            def set_formula(r, c, formula):
-                # xlwt requires formula without leading '=' for Formula() obj
-                # BUT the spec says write with '='"TOTAL..." — let's just write it as a string formula
-                # xlwt can handle simple formulas via ws.write with string starting with '='
-                try:
-                    ws.write(r - 1, c - 1, xlwt.Formula(formula.lstrip("=")))
-                except Exception:
-                    # Fallback: write as string (Excel will interpret it)
-                    ws.write(r - 1, c - 1, formula)
+            def set_formula(r, c, f_text):
+                ws.write(r - 1, c - 1, f_text)
 
             def save_func(p):
                 _verify_formulas(formula_snapshot, set(), warnings)
@@ -254,8 +247,7 @@ def generate_single_invoice(
             if c_type:
                 set_cell(row, 8, "USD")
 
-        # B30 formula — only cell B30, 不使用 xlwt.Formula (它不解析复杂公式)
-        # xlwt 中写公式字符串需要用 '=' 开头，通过 ws.write 即可
+        # B30 formula — only cell B30, 直接写公式字符串(Excel打开时自动计算)
         formula = '="TOTAL FREIGHT USD"&TEXT(I29,"#,##0.########")&"."'
         set_formula(30, 2, formula)
 
